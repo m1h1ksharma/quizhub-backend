@@ -1,7 +1,6 @@
 package com.piet.quizhub.controller;
 
 import com.piet.quizhub.entity.*;
-import com.piet.quizhub.helper.ExcelHelper;
 import com.piet.quizhub.repository.*;
 import com.piet.quizhub.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,7 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
 
 @RestController
@@ -20,12 +18,11 @@ public class AdminController {
     @Autowired private QuestionRepository questionRepo;
     @Autowired private QuizConfigRepository configRepo;
     @Autowired private QuestionService questionService;
-    @Autowired private AIService aiService;
     @Autowired private UserRepository userRepository;
     @Autowired private ResultRepository resultRepo;
 
     // ==========================================
-    // 1. DASHBOARD & STATS[cite: 1]
+    // 1. DASHBOARD & STATS[cite: 5]
     // ==========================================
     @GetMapping("/dashboard/stats")
     public ResponseEntity<?> getDashboardStats() {
@@ -50,7 +47,7 @@ public class AdminController {
     }
 
     // ==========================================
-    // 2. ROUNDS & SETTINGS
+    // 2. SYSTEM SETTINGS & ROUNDS[cite: 3, 9]
     // ==========================================
     @GetMapping("/questions/rounds")
     public ResponseEntity<List<String>> getUniqueRounds() {
@@ -61,7 +58,6 @@ public class AdminController {
 
     @GetMapping("/settings/timer")
     public ResponseEntity<?> getTimer() {
-        // Fetch config with ID 1 or create default to avoid errors[cite: 1]
         QuizConfig config = configRepo.findById(1L).orElseGet(() -> {
             QuizConfig c = new QuizConfig();
             c.setId(1L);
@@ -76,7 +72,6 @@ public class AdminController {
     @PostMapping("/settings/update-timer")
     public ResponseEntity<?> updateRoundTimer(@RequestBody Map<String, Object> payload) {
         try {
-            // Frontend keys match: timerMinutes, questionLimit, roundName[cite: 3]
             int timer = Integer.parseInt(payload.get("timerMinutes").toString());
             int limit = Integer.parseInt(payload.get("questionLimit").toString());
             String round = payload.getOrDefault("roundName", "Normal Quiz").toString();
@@ -95,11 +90,19 @@ public class AdminController {
     }
 
     // ==========================================
-    // 3. QUESTION CRUD[cite: 4]
+    // 3. QUESTION MANAGEMENT (CRUD)[cite: 4, 6]
     // ==========================================
     @GetMapping("/questions")
     public List<Question> getAllQuestions() {
         return questionRepo.findAll();
+    }
+
+    // FIX: Added missing GET by ID for EditQuestion.jsx[cite: 6]
+    @GetMapping("/questions/{id}")
+    public ResponseEntity<Question> getQuestionById(@PathVariable Long id) {
+        return questionRepo.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/questions/add")
@@ -132,47 +135,52 @@ public class AdminController {
     }
 
     @DeleteMapping("/questions/round/{roundName}")
-    @PreAuthorize("hasAuthority('ROLE_ADMIN')")
     public ResponseEntity<?> deleteRound(@PathVariable String roundName) {
-        try {
-            List<Question> questions = questionRepo.findByCategory(roundName);
-            questionRepo.deleteAll(questions);
-            questionService.refreshQuestions();
-            return ResponseEntity.ok(Map.of("message", roundName + " round deleted!"));
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("error", "Delete failed"));
-        }
-    }
-
-    @DeleteMapping("/questions/clear-by-round")
-    public ResponseEntity<?> clearQuestionsByRound(@RequestParam String roundName) {
-        try {
-            List<Question> questions = questionRepo.findByCategory(roundName);
-            questionRepo.deleteAll(questions);
-            return ResponseEntity.ok("Questions cleared successfully for " + roundName);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: " + e.getMessage());
-        }
+        List<Question> questions = questionRepo.findByCategory(roundName);
+        questionRepo.deleteAll(questions);
+        questionService.refreshQuestions();
+        return ResponseEntity.ok(Map.of("message", roundName + " round purged!"));
     }
 
     // ==========================================
-    // 4. RESULTS MANAGEMENT[cite: 5]
+    // 4. STUDENT RESULTS & LEADERBOARD[cite: 5, 7, 8]
     // ==========================================
     @GetMapping("/results/all")
     public ResponseEntity<?> getAllResults() {
         return ResponseEntity.ok(resultRepo.findAllByOrderByScoreDesc());
     }
 
+    // FIX: Added missing GET by ID for EditStudentResult.jsx[cite: 7]
+    @GetMapping("/results/{id}")
+    public ResponseEntity<Result> getResultById(@PathVariable Long id) {
+        return resultRepo.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    // FIX: Standardized update path for student results[cite: 7]
+    @PutMapping("/update-result/{id}")
+    public ResponseEntity<?> updateResult(@PathVariable Long id, @RequestBody Result updatedResult) {
+        return resultRepo.findById(id).map(r -> {
+            r.setStudentName(updatedResult.getStudentName());
+            r.setStudentMobile(updatedResult.getStudentMobile());
+            r.setScore(updatedResult.getScore());
+            r.setTotalQuestions(updatedResult.getTotalQuestions());
+            r.setQuizRound(updatedResult.getQuizRound());
+            resultRepo.save(r);
+            return ResponseEntity.ok(Map.of("message", "Result Updated!"));
+        }).orElse(ResponseEntity.notFound().build());
+    }
+
     @DeleteMapping("/delete-result/{id}")
     public ResponseEntity<?> deleteResult(@PathVariable Long id) {
-        if (!resultRepo.existsById(id)) return ResponseEntity.notFound().build();
         resultRepo.deleteById(id);
-        return ResponseEntity.ok(Map.of("message", "Result deleted!"));
+        return ResponseEntity.ok(Map.of("message", "Deleted!"));
     }
 
     @DeleteMapping("/results/delete-all")
     public ResponseEntity<?> deleteAllResults() {
         resultRepo.deleteAllInBatch();
-        return ResponseEntity.ok(Map.of("message", "All results cleared!"));
+        return ResponseEntity.ok(Map.of("message", "Database Cleared!"));
     }
 }
