@@ -28,26 +28,27 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
-            .cors(Customizer.withDefaults())
+            .cors(Customizer.withDefaults()) // CORS enable karna zaroori hai
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // 1. Preflight requests (CORS) allow karo
+                // 1. Preflight requests (CORS OPTIONS) allow karo
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 
-                // 2. Public Endpoints
-                .requestMatchers("/api/auth/**").permitAll()
+                // 2. Public Endpoints (Login/Register)
+                // Yahan /auth/** aur /api/auth/** dono allow hain safety ke liye
+                .requestMatchers("/api/auth/**", "/auth/**").permitAll()
                 
-                // 3. Student Endpoints (FIX: Added hasAnyAuthority for better matching)
+                // 3. Student Endpoints
                 .requestMatchers("/api/student/**").hasAnyAuthority("ROLE_STUDENT", "ROLE_ADMIN")
                 
                 // 4. Admin Endpoints
                 .requestMatchers("/api/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
                 
-                // 5. Default
+                // 5. Baki sab secure
                 .anyRequest().authenticated()
             );
 
-        // Filter order set karo
+        // JWT filter ko UsernamePassword filter se pehle lagao
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
         
         return http.build();
@@ -56,13 +57,18 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOrigins(List.of("http://localhost:3000",  "http://192.168.1.14:3000"));
-        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         
-
-        cfg.setAllowedHeaders(List.of("*")); 
+        // Yahan tumhare frontend ke links honge
+        cfg.setAllowedOrigins(List.of(
+            "http://localhost:3000", 
+            "http://127.0.0.1:3000",
+            "https://quizhub-frontend-six.vercel.app" // Tera actual Vercel link
+        ));
+        
+        cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept")); 
         cfg.setExposedHeaders(List.of("Authorization"));
-        cfg.setAllowCredentials(true);
+        cfg.setAllowCredentials(true); // Cookies/Auth headers ke liye true
         
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
