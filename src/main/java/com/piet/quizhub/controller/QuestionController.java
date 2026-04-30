@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/student/questions")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "https://quizhub-frontend-six.vercel.app")
 public class QuestionController {
 
     @Autowired

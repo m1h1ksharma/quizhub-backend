@@ -14,7 +14,7 @@ import java.util.*;
 
 @RestController
 @RequestMapping("/api/student")
-@CrossOrigin(origins = "http://localhost:3000")
+@CrossOrigin(origins = "https://quizhub-frontend-six.vercel.app")
 public class StudentController {
 
     @Autowired private ResultRepository resultRepo;
