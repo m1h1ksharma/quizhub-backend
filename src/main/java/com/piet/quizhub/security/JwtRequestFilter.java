@@ -29,54 +29,40 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         String role = null;
         String jwt = null;
 
-        // 1. Header aur "Bearer " prefix check karo
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             jwt = authHeader.substring(7);
             
-            // 🔥 FORMAT CHECK: "2 period" error (invalid token) se bachne ke liye
             if (jwt != null && !jwt.isEmpty() && jwt.split("\\.").length == 3) {
                 try {
                     username = jwtUtil.extractUsername(jwt);
                     role = jwtUtil.extractRole(jwt);
                 } catch (Exception e) {
-                    System.out.println("❌ JWT Error: " + e.getMessage());
+                    System.out.println("JWT Error: " + e.getMessage());
                 }
             } else {
-                System.out.println("⚠️ Warning: Malformed or Empty Token received.");
+                System.out.println("Warning: Malformed or Empty Token received.");
             }
         }
 
-        // 2. Agar username mila aur user already authenticated nahi hai
         if (username != null && role != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            
             try {
                 if (jwtUtil.validateToken(jwt, username)) {
-                    
-                    // Spring Security expects roles with "ROLE_" prefix
                     String finalRole = role.toUpperCase().startsWith("ROLE_") ? 
                                        role.toUpperCase() : "ROLE_" + role.toUpperCase();
 
-                    // Create Authentication Token
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            username, 
-                            null, 
-                            List.of(new SimpleGrantedAuthority(finalRole))
-                    );
-                    
+                            username, null, List.of(new SimpleGrantedAuthority(finalRole)));
+
                     authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    
-                    // 3. Set Security Context
+
                     SecurityContextHolder.getContext().setAuthentication(authToken);
-                    
-                    // Debugging ke liye terminal mein print hoga
-                    System.out.println("✅ Authorized User: " + username + " | Final Role: " + finalRole);
+                    System.out.println("Authorized User: " + username + " | Final Role: " + finalRole);
                 }
             } catch (Exception e) {
-                System.out.println("❌ Token Validation Failed: " + e.getMessage());
+                System.out.println("Token Validation Failed: " + e.getMessage());
             }
         }
 
-        // 4. Filter chain ko aage badhao
         chain.doFilter(request, response);
     }
 }

@@ -12,9 +12,17 @@ public class JwtUtil {
     private final String SECRET_KEY = "PIET_QUIZHUB_SECRET_KEY_FOR_2026_EXAM_BATCH_SECURE";
     private final Key key = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    public String extractName(String token) { return extractClaim(token, claims -> (String) claims.get("name")); }
-    public String extractUsername(String token) { return extractClaim(token, Claims::getSubject); }
-    public String extractRole(String token) { return extractClaim(token, claims -> (String) claims.get("role")); }
+    public String extractName(String token) { 
+        return extractClaim(token, claims -> (String) claims.get("name")); 
+    }
+
+    public String extractUsername(String token) { 
+        return extractClaim(token, Claims::getSubject); 
+    }
+
+    public String extractRole(String token) { 
+        return extractClaim(token, claims -> (String) claims.get("role")); 
+    }
 
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
@@ -27,7 +35,8 @@ public class JwtUtil {
         claims.put("name", name);
         return Jwts.builder()
                 .setClaims(claims).setSubject(mobile)
-                .setIssuedAt(new Date()).setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 10))
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24)) // 24 hours
                 .signWith(key, SignatureAlgorithm.HS256).compact();
     }
 
