@@ -142,6 +142,18 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("message", roundName + " round purged!"));
     }
 
+    // AdminController.java mein ye add kar lo
+@DeleteMapping("/questions/delete-all")
+public ResponseEntity<?> deleteAllQuestions() {
+    try {
+        questionRepo.deleteAllInBatch(); // Pura table saaf[cite: 1]
+        questionService.refreshQuestions(); // Cache refresh[cite: 1]
+        return ResponseEntity.ok(Map.of("message", "All questions deleted successfully!"));
+    } catch (Exception e) {
+        return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
+    }
+}
+
     // ==========================================
     // 4. STUDENT RESULTS & LEADERBOARD[cite: 5, 7, 8]
     // ==========================================
