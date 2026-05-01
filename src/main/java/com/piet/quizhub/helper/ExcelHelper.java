@@ -10,10 +10,16 @@ import java.util.List;
 
 public class ExcelHelper {
 
+    /**
+     * Excel file ko parse karke Questions ki list banata hai
+     * @param is - Excel file ka input stream
+     * @param selectedRound - Jo round admin ne dropdown se select kiya hai
+     * @return List of Question objects
+     */
     public static List<Question> excelToQuestions(InputStream is, String selectedRound) {
         try {
             Workbook workbook = new XSSFWorkbook(is);
-            Sheet sheet = workbook.getSheetAt(0);
+            Sheet sheet = workbook.getSheetAt(0); // Pehli sheet read karega
             Iterator<Row> rows = sheet.iterator();
             List<Question> questions = new ArrayList<>();
 
@@ -21,7 +27,7 @@ public class ExcelHelper {
             while (rows.hasNext()) {
                 Row currentRow = rows.next();
 
-                // Skip Header Row
+                // 1. Skip Header Row (First Row)
                 if (rowNumber == 0) {
                     rowNumber++;
                     continue;
@@ -29,43 +35,53 @@ public class ExcelHelper {
 
                 Question q = new Question();
                 
-                // Column 0 to 4: Question content and options
+                // 2. Cell values read karna (Columns: 0-Content, 1-A, 2-B, 3-C, 4-D, 5-Ans)
                 q.setContent(getCellValue(currentRow.getCell(0)));
                 q.setOptionA(getCellValue(currentRow.getCell(1)));
                 q.setOptionB(getCellValue(currentRow.getCell(2)));
                 q.setOptionC(getCellValue(currentRow.getCell(3)));
                 q.setOptionD(getCellValue(currentRow.getCell(4)));
                 
-                // Column 5: Correct Answer
+                // 3. Correct Answer formatting (A, B, C, or D)
                 String correctVal = getCellValue(currentRow.getCell(5)).trim().toUpperCase();
                 q.setCorrectAns(correctVal);
 
-                // --- FIX: Dropdown wala round use karo ---
-                // Excel mein column 6 ho ya na ho, farak nahi padta
+                // 4. Dropdown wala round category mein set karna
                 q.setCategory(selectedRound); 
 
-                // Khali rows ko skip karne ke liye safety check
-                if (q.getContent() != null && !q.getContent().isEmpty()) {
+                // 5. Khali rows check (Safety Check)
+                if (q.getContent() != null && !q.getContent().trim().isEmpty()) {
                     questions.add(q);
                 }
             }
             workbook.close();
             return questions;
+            
         } catch (Exception e) {
             e.printStackTrace();
-            throw new RuntimeException("Excel parse karne mein galti: " + e.getMessage());
+            throw new RuntimeException("Excel parsing error: " + e.getMessage());
         }
     }
 
+    /**
+     * Har type ke cell (String, Numeric, Boolean) se text nikalne ke liye helper
+     */
     private static String getCellValue(Cell cell) {
         if (cell == null) return "";
+        
+        DataFormatter formatter = new DataFormatter(); // Yeh numeric cells ko bhi text mein handle kar lega
+        
         switch (cell.getCellType()) {
-            case STRING: return cell.getStringCellValue();
+            case STRING: 
+                return cell.getStringCellValue();
             case NUMERIC:
-                DataFormatter formatter = new DataFormatter();
                 return formatter.formatCellValue(cell);
-            case BOOLEAN: return String.valueOf(cell.getBooleanCellValue());
-            default: return "";
+            case BOOLEAN: 
+                return String.valueOf(cell.getBooleanCellValue());
+            case FORMULA:
+                return cell.getCellFormula();
+            default: 
+                return "";
         }
     }
 }
