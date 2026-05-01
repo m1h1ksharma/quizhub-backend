@@ -7,6 +7,7 @@ import com.piet.quizhub.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
@@ -19,12 +20,11 @@ public class AdminController {
     @Autowired private QuestionRepository questionRepo;
     @Autowired private QuizConfigRepository configRepo;
     @Autowired private QuestionService questionService;
+    @Autowired private AIService aiService;
     @Autowired private UserRepository userRepository;
     @Autowired private ResultRepository resultRepo;
 
-    // ==========================================
-    // 1. DASHBOARD STATS
-    // ==========================================
+    // --- DASHBOARD & STATS ---
     @GetMapping("/dashboard/stats")
     public ResponseEntity<?> getDashboardStats() {
         Map<String, Object> stats = new HashMap<>();
@@ -47,78 +47,67 @@ public class AdminController {
         return ResponseEntity.ok(stats);
     }
 
-    // ==========================================
-    // 2. EXCEL UPLOAD (SYNCED)
-    // ==========================================
-    @PostMapping("/questions/upload-excel")
-    public ResponseEntity<?> uploadExcel(@RequestParam("file") MultipartFile file, @RequestParam("round") String round) {
-        try {
-            // excelToQuestions method from your ExcelHelper
-            List<Question> list = ExcelHelper.excelToQuestions(file.getInputStream(), round);
-            questionRepo.saveAll(list);
-            questionService.refreshQuestions();
-            return ResponseEntity.ok(Map.of("message", "Bulk Upload Successful!"));
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", e.getMessage()));
-        }
+    // --- LEADERBOARD & RESULTS ---
+    @GetMapping("/results/all")
+    public ResponseEntity<?> getAllResults() {
+        return ResponseEntity.ok(resultRepo.findAllByOrderByScoreDesc());
     }
 
-    // ==========================================
-    // 3. SETTINGS & TIMER
-    // ==========================================
+    @GetMapping("/results/{id}")
+    public ResponseEntity<Result> getResultById(@PathVariable Long id) {
+        return resultRepo.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/delete-result/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<?> deleteResult(@PathVariable Long id) {
+        resultRepo.deleteById(id);
+        return ResponseEntity.ok(Map.of("message", "Result deleted!"));
+    }
+
+    @DeleteMapping("/results/delete-all")
+    public ResponseEntity<?> deleteAllResults() {
+        resultRepo.deleteAllInBatch();
+        return ResponseEntity.ok(Map.of("message", "All results cleared!"));
+    }
+
+    // --- SETTINGS ---
     @GetMapping("/settings/timer")
     public ResponseEntity<?> getTimer() {
-        QuizConfig config = configRepo.findById(1L).orElseGet(() -> {
-            QuizConfig c = new QuizConfig();
-            c.setId(1L);
-            c.setActiveRound("Normal Quiz");
-            c.setTimerMinutes(10);
-            c.setQuestionLimit(50);
-            return c;
-        });
+        QuizConfig config = configRepo.findById(1L).orElse(new QuizConfig(1L, "Normal Quiz", 10));
         return ResponseEntity.ok(config);
     }
 
     @PostMapping("/settings/update-timer")
     public ResponseEntity<?> updateRoundTimer(@RequestBody Map<String, Object> payload) {
         try {
+            int timer = Integer.parseInt(payload.get("timerMinutes").toString());
+            int limit = Integer.parseInt(payload.get("questionLimit").toString());
+            String round = payload.getOrDefault("roundName", "Normal Quiz").toString();
+
             QuizConfig config = configRepo.findById(1L).orElse(new QuizConfig());
             config.setId(1L);
-            config.setTimerMinutes(Integer.parseInt(payload.get("timerMinutes").toString()));
-            config.setQuestionLimit(Integer.parseInt(payload.get("questionLimit").toString()));
-            config.setActiveRound(payload.getOrDefault("roundName", "Normal Quiz").toString());
+            config.setTimerMinutes(timer);
+            config.setQuestionLimit(limit);
+            config.setActiveRound(round);
             configRepo.save(config);
-            return ResponseEntity.ok(Map.of("message", "Settings Updated Successfully!"));
+            return ResponseEntity.ok(Map.of("message", "Settings Updated!"));
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", e.getMessage()));
         }
     }
 
-    @GetMapping("/questions/rounds")
-    public ResponseEntity<List<String>> getUniqueRounds() {
-        List<String> rounds = questionRepo.findAllUniqueCategories();
-        if (rounds.isEmpty()) rounds = Arrays.asList("Normal Quiz");
-        return ResponseEntity.ok(rounds);
-    }
-
-    // ==========================================
-    // 4. QUESTION CRUD
-    // ==========================================
+    // --- QUESTION CRUD ---
     @GetMapping("/questions")
     public List<Question> getAllQuestions() {
         return questionRepo.findAll();
-    }
-
-    @GetMapping("/questions/{id}")
-    public ResponseEntity<Question> getQuestionById(@PathVariable Long id) {
-        return questionRepo.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
     @PostMapping("/questions/add")
     public ResponseEntity<?> addQuestion(@RequestBody Question question) {
         questionRepo.save(question);
         questionService.refreshQuestions();
-        return ResponseEntity.ok(Map.of("message", "Question Saved!"));
+        return ResponseEntity.ok(Map.of("message", "Saved!"));
     }
 
     @PutMapping("/questions/{id}")
@@ -132,7 +121,7 @@ public class AdminController {
             q.setCorrectAns(updatedQ.getCorrectAns());
             q.setCategory(updatedQ.getCategory());
             questionRepo.save(q);
-            return ResponseEntity.ok(Map.of("message", "Question Updated!"));
+            return ResponseEntity.ok(Map.of("message", "Updated!"));
         }).orElse(ResponseEntity.notFound().build());
     }
 
@@ -140,45 +129,48 @@ public class AdminController {
     public ResponseEntity<?> deleteQuestion(@PathVariable Long id) {
         questionRepo.deleteById(id);
         questionService.refreshQuestions();
-        return ResponseEntity.ok(Map.of("message", "Question Deleted!"));
+        return ResponseEntity.ok(Map.of("message", "Deleted!"));
+    }
+
+    @PostMapping("/questions/upload-excel")
+    public ResponseEntity<?> uploadExcel(@RequestParam("file") MultipartFile file, @RequestParam("round") String round) {
+        try {
+            List<Question> questions = ExcelHelper.excelToQuestions(file.getInputStream(), round);
+            questionRepo.saveAll(questions);
+            questionService.refreshQuestions();
+            return ResponseEntity.ok(Map.of("message", "Uploaded " + questions.size() + " questions!"));
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Excel Error: " + e.getMessage());
+        }
+    }
+
+    // --- AI GENERATOR ---
+    @PostMapping("/questions/ai-generate")
+    public ResponseEntity<?> generateAIQuestions(@RequestBody Map<String, Object> request) {
+        try {
+            String topic = request.get("topic").toString();
+            int count = Integer.parseInt(request.get("count").toString());
+            String jsonResponse = aiService.getAIQuestions(topic, count, "Medium");
+            return ResponseEntity.ok(jsonResponse);
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("AI Error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/questions/ai-save-bulk")
+    public ResponseEntity<?> saveAIQuestions(@RequestBody List<Question> questions) {
+        questionRepo.saveAll(questions);
+        questionService.refreshQuestions();
+        return ResponseEntity.ok(Map.of("message", "AI Questions saved!"));
     }
 
     @DeleteMapping("/questions/clear-by-round")
-    public ResponseEntity<?> clearByRound(@RequestParam String roundName) {
-        questionRepo.deleteAll(questionRepo.findByCategory(roundName));
-        questionService.refreshQuestions();
-        return ResponseEntity.ok(Map.of("message", "Round Purged!"));
-    }
-
-    @DeleteMapping("/questions/delete-all")
-    public ResponseEntity<?> deleteAllQuestions() {
-        questionRepo.deleteAllInBatch();
-        questionService.refreshQuestions();
-        return ResponseEntity.ok(Map.of("message", "All Questions Deleted!"));
-    }
-
-    // ==========================================
-    // 5. STUDENT RESULTS
-    // ==========================================
-    @GetMapping("/results/all")
-    public ResponseEntity<?> getAllResults() {
-        return ResponseEntity.ok(resultRepo.findAllByOrderByScoreDesc());
-    }
-
-    @GetMapping("/results/{id}")
-    public ResponseEntity<Result> getResultById(@PathVariable Long id) {
-        return resultRepo.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
-    }
-
-    @DeleteMapping("/delete-result/{id}")
-    public ResponseEntity<?> deleteResult(@PathVariable Long id) {
-        resultRepo.deleteById(id);
-        return ResponseEntity.ok(Map.of("message", "Result Deleted!"));
-    }
-
-    @DeleteMapping("/results/delete-all")
-    public ResponseEntity<?> deleteAllResults() {
-        resultRepo.deleteAllInBatch();
-        return ResponseEntity.ok(Map.of("message", "All Results Wiped!"));
+    public ResponseEntity<?> clearQuestionsByRound(@RequestParam String roundName) {
+        try {
+            questionService.deleteQuestionsByCategory(roundName);
+            return ResponseEntity.ok("Questions cleared successfully for " + roundName);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: " + e.getMessage());
+        }
     }
 }
