@@ -170,7 +170,7 @@ public ResponseEntity<?> deleteAllQuestions() {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // FIX: Standardized update path for student results[cite: 7]
+
     @PutMapping("/update-result/{id}")
     public ResponseEntity<?> updateResult(@PathVariable Long id, @RequestBody Result updatedResult) {
         return resultRepo.findById(id).map(r -> {
