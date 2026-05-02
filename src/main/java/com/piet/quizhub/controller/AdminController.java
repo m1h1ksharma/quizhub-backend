@@ -42,7 +42,11 @@ public class AdminController {
         graphData.add(Map.of("range", "61-80%", "count", resultRepo.countByScoreBetween(7, 8)));
         graphData.add(Map.of("range", "81-100%", "count", resultRepo.countByScoreBetween(9, 10)));
         stats.put("graphData", graphData);
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok()
+            .header("Cache-Control", "no-cache, no-store, must-revalidate")
+            .header("Pragma", "no-cache")
+            .header("Expires", "0")
+            .body(stats);
     }
 
     // --- LEADERBOARD & RESULTS ---
