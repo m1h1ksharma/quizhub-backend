@@ -8,7 +8,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -28,135 +27,83 @@ public class AuthController {
     @Autowired
     private JwtUtil jwtUtil;
 
-    // =========================
-    // REGISTER STUDENT
-    // =========================
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody User user) {
-
-        if (userRepository.existsByMobileNumberAndName(
-                user.getMobileNumber(),
-                user.getName())) {
-
+        if (userRepository.existsByMobileNumberAndName(user.getMobileNumber(), user.getName())) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("message", "Already registered. Please login."));
+                    .body(Map.of("message", "Already registered with this name! Please Login."));
         }
 
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-
-        // FIXED: consistent role format
-        user.setRole("ROLE_STUDENT");
-
+        user.setRole("STUDENT");
         userRepository.save(user);
 
-        String token = jwtUtil.generateToken(
-                user.getMobileNumber(),
-                user.getRole(),
-                user.getName()
-        );
+        String token = jwtUtil.generateToken(user.getMobileNumber(), user.getRole(), user.getName());
 
         return ResponseEntity.ok(Map.of(
                 "token", token,
                 "role", user.getRole(),
                 "name", user.getName(),
-                "message", "Registration Successful"
+                "message", "Registration Successful!"
         ));
     }
 
-    // =========================
-    // CHECK MOBILE
-    // =========================
     @PostMapping("/check-mobile")
     public ResponseEntity<?> checkMobile(@RequestBody Map<String, String> request) {
-
         String mobile = request.get("mobileNumber");
         List<User> users = userRepository.findAllByMobileNumber(mobile);
 
         if (users.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body("Not registered");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Not registered!");
         }
 
-        List<String> names = users.stream()
-                .map(User::getName)
-                .collect(Collectors.toList());
-
+        List<String> names = users.stream().map(User::getName).collect(Collectors.toList());
         return ResponseEntity.ok(names);
     }
 
-    // =========================
-    // STUDENT LOGIN
-    // =========================
     @PostMapping("/login-student")
     public ResponseEntity<?> loginStudent(@RequestBody Map<String, String> request) {
-
         String mobile = request.get("mobileNumber");
         String name = request.get("name");
         String password = request.get("password");
 
-        Optional<User> userOpt =
-                userRepository.findByMobileNumberAndName(mobile, name);
+        Optional<User> userOpt = userRepository.findByMobileNumberAndName(mobile, name);
 
         if (userOpt.isPresent()) {
-
             User user = userOpt.get();
-
             if (passwordEncoder.matches(password, user.getPassword())) {
-
-                String token = jwtUtil.generateToken(
-                        user.getMobileNumber(),
-                        user.getRole(),
-                        user.getName()
-                );
-
+                String token = jwtUtil.generateToken(user.getMobileNumber(), user.getRole(), user.getName());
                 return ResponseEntity.ok(Map.of(
                         "token", token,
                         "role", user.getRole(),
                         "name", user.getName()
                 ));
+            } else {
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid Password!");
             }
-
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body("Invalid Password");
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User not found!");
         }
-
-        return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body("User not found");
     }
 
-    // =========================
-    // ADMIN LOGIN
-    // =========================
     @PostMapping("/login-admin")
     public ResponseEntity<?> loginAdmin(@RequestBody Map<String, String> request) {
-
         String email = request.get("email");
         String password = request.get("password");
 
         Optional<User> adminOpt = userRepository.findByEmail(email);
 
         if (adminOpt.isPresent()) {
-
             User admin = adminOpt.get();
-
-            if ("ROLE_ADMIN".equals(admin.getRole())
-                    && passwordEncoder.matches(password, admin.getPassword())) {
-
-                String token = jwtUtil.generateToken(
-                        admin.getMobileNumber(),
-                        admin.getRole(),
-                        admin.getName()
-                );
-
+            if ("ADMIN".equals(admin.getRole()) && passwordEncoder.matches(password, admin.getPassword())) {
+                String token = jwtUtil.generateToken(admin.getMobileNumber(), "ADMIN", admin.getName());
                 return ResponseEntity.ok(Map.of(
                         "token", token,
-                        "role", admin.getRole(),
+                        "role", "ADMIN",
                         "name", admin.getName()
                 ));
             }
         }
-
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body("Unauthorized Admin Login");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body("Unauthorized Admin Login!");
     }
 }
