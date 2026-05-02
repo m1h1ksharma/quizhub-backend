@@ -26,69 +26,34 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // 1. CSRF disable karna zaroori hai multipart/POST requests ke liye
             .csrf(csrf -> csrf.disable()) 
-            
-            // 2. Global CORS configuration apply karna
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            
-            // 3. Stateless session management (JWT ke liye)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            
             .authorizeHttpRequests(auth -> auth
-                // 4. Preflight OPTIONS requests ko hamesha allow karo
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                
-                // 5. Public endpoints (Login/Register)
                 .requestMatchers("/api/auth/**", "/auth/**").permitAll()
-                
-                // 6. Admin Endpoints: Dono variants (ROLE_ADMIN aur ADMIN) allow kiye hain
+                // Admin access control for all admin routes
                 .requestMatchers("/api/admin/**").hasAnyAuthority("ROLE_ADMIN", "ADMIN")
-                
-                // 7. Student Endpoints
                 .requestMatchers("/api/student/**").hasAnyAuthority("ROLE_STUDENT", "STUDENT", "ROLE_ADMIN", "ADMIN")
-                
-                // 8. Baki sab secure
                 .anyRequest().authenticated()
             );
 
-        // 9. JWT Filter ko UsernamePassword filter se pehle add karna
         http.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class);
-        
         return http.build();
     }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        
-        // Frontend origins jo allowed hain
-        cfg.setAllowedOrigins(List.of(
-            "http://localhost:3000", 
-            "https://quizhub-frontend-six.vercel.app"
-        ));
-        
+        cfg.setAllowedOrigins(List.of("http://localhost:3000", "https://quizhub-frontend-six.vercel.app"));
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
-        
-        // Headers jo communication ke liye zaroori hain
-        cfg.setAllowedHeaders(List.of(
-            "Authorization", 
-            "Content-Type", 
-            "Accept", 
-            "X-Requested-With", 
-            "Origin"
-        ));
-        
+        cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "X-Requested-With", "Origin"));
         cfg.setExposedHeaders(List.of("Authorization"));
         cfg.setAllowCredentials(true);
-        
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
         return source;
     }
 
-    @Bean 
-    public BCryptPasswordEncoder passwordEncoder() { 
-        return new BCryptPasswordEncoder(); 
-    }
+    @Bean public BCryptPasswordEncoder passwordEncoder() { return new BCryptPasswordEncoder(); }
 }

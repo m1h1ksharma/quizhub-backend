@@ -7,7 +7,6 @@ import com.piet.quizhub.service.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.*;
@@ -31,11 +30,11 @@ public class AdminController {
         stats.put("totalUsers", userRepository.countByRole("STUDENT"));
         stats.put("totalQuestions", questionRepo.count());
         stats.put("totalRounds", questionRepo.findAllUniqueCategories().size());
-
+        
         Integer topScore = resultRepo.findTopScore();
         stats.put("topScore", topScore != null ? topScore : 0);
         stats.put("recentSubmissions", resultRepo.findTop10ByOrderByTimestampDesc());
-
+        
         List<Map<String, Object>> graphData = new ArrayList<>();
         graphData.add(Map.of("range", "0-20%", "count", resultRepo.countByScoreBetween(0, 2)));
         graphData.add(Map.of("range", "21-40%", "count", resultRepo.countByScoreBetween(3, 4)));
@@ -43,7 +42,6 @@ public class AdminController {
         graphData.add(Map.of("range", "61-80%", "count", resultRepo.countByScoreBetween(7, 8)));
         graphData.add(Map.of("range", "81-100%", "count", resultRepo.countByScoreBetween(9, 10)));
         stats.put("graphData", graphData);
-
         return ResponseEntity.ok(stats);
     }
 
@@ -58,8 +56,19 @@ public class AdminController {
         return resultRepo.findById(id).map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
     }
 
+    @PutMapping("/update-result/{id}")
+    public ResponseEntity<?> updateStudentResult(@PathVariable Long id, @RequestBody Result updatedResult) {
+        return resultRepo.findById(id).map(res -> {
+            res.setStudentName(updatedResult.getStudentName());
+            res.setStudentMobile(updatedResult.getStudentMobile());
+            res.setScore(updatedResult.getScore());
+            res.setQuizRound(updatedResult.getQuizRound());
+            resultRepo.save(res);
+            return ResponseEntity.ok(Map.of("message", "Result updated successfully!"));
+        }).orElse(ResponseEntity.status(404).body(Map.of("message", "Result not found!")));
+    }
+
     @DeleteMapping("/delete-result/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> deleteResult(@PathVariable Long id) {
         resultRepo.deleteById(id);
         return ResponseEntity.ok(Map.of("message", "Result deleted!"));
@@ -71,25 +80,36 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("message", "All results cleared!"));
     }
 
-    // --- SETTINGS ---
+    // --- ROUNDS & SETTINGS ---
+    @GetMapping("/questions/rounds")
+    public ResponseEntity<List<String>> getUniqueRounds() {
+        List<String> rounds = questionRepo.findAllUniqueCategories();
+        if (rounds.isEmpty()) rounds = Arrays.asList("Normal Quiz");
+        return ResponseEntity.ok(rounds);
+    }
+
+   // --- SETTINGS ---
     @GetMapping("/settings/timer")
     public ResponseEntity<?> getTimer() {
-        QuizConfig config = configRepo.findById(1L).orElse(new QuizConfig(1L, "Normal Quiz", 10));
+        QuizConfig config = configRepo.findById(1L).orElseGet(() -> {
+            QuizConfig newConfig = new QuizConfig();
+            newConfig.setId(1L);
+            newConfig.setActiveRound("Normal Quiz");
+            newConfig.setTimerMinutes(10);
+            newConfig.setQuestionLimit(50);
+            return newConfig;
+        });
         return ResponseEntity.ok(config);
     }
 
     @PostMapping("/settings/update-timer")
     public ResponseEntity<?> updateRoundTimer(@RequestBody Map<String, Object> payload) {
         try {
-            int timer = Integer.parseInt(payload.get("timerMinutes").toString());
-            int limit = Integer.parseInt(payload.get("questionLimit").toString());
-            String round = payload.getOrDefault("roundName", "Normal Quiz").toString();
-
             QuizConfig config = configRepo.findById(1L).orElse(new QuizConfig());
             config.setId(1L);
-            config.setTimerMinutes(timer);
-            config.setQuestionLimit(limit);
-            config.setActiveRound(round);
+            config.setTimerMinutes(Integer.parseInt(payload.get("timerMinutes").toString()));
+            config.setQuestionLimit(Integer.parseInt(payload.get("questionLimit").toString()));
+            config.setActiveRound(payload.getOrDefault("roundName", "Normal Quiz").toString());
             configRepo.save(config);
             return ResponseEntity.ok(Map.of("message", "Settings Updated!"));
         } catch (Exception e) {
@@ -132,6 +152,20 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("message", "Deleted!"));
     }
 
+    @DeleteMapping("/questions/clear-by-round")
+    public ResponseEntity<?> clearByRound(@RequestParam String roundName) {
+        questionService.deleteQuestionsByCategory(roundName);
+        return ResponseEntity.ok(Map.of("message", "Round data cleared!"));
+    }
+
+    @DeleteMapping("/questions/delete-all")
+    public ResponseEntity<?> deleteAllQuestions() {
+        questionRepo.deleteAllInBatch();
+        questionService.refreshQuestions();
+        return ResponseEntity.ok(Map.of("message", "Bank Cleared!"));
+    }
+
+    // --- EXCEL & AI ---
     @PostMapping("/questions/upload-excel")
     public ResponseEntity<?> uploadExcel(@RequestParam("file") MultipartFile file, @RequestParam("round") String round) {
         try {
@@ -144,7 +178,6 @@ public class AdminController {
         }
     }
 
-    // --- AI GENERATOR ---
     @PostMapping("/questions/ai-generate")
     public ResponseEntity<?> generateAIQuestions(@RequestBody Map<String, Object> request) {
         try {
@@ -162,15 +195,5 @@ public class AdminController {
         questionRepo.saveAll(questions);
         questionService.refreshQuestions();
         return ResponseEntity.ok(Map.of("message", "AI Questions saved!"));
-    }
-
-    @DeleteMapping("/questions/clear-by-round")
-    public ResponseEntity<?> clearQuestionsByRound(@RequestParam String roundName) {
-        try {
-            questionService.deleteQuestionsByCategory(roundName);
-            return ResponseEntity.ok("Questions cleared successfully for " + roundName);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error: " + e.getMessage());
-        }
     }
 }
