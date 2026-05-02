@@ -47,17 +47,23 @@ public class JwtRequestFilter extends OncePerRequestFilter {
         if (username != null && role != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             try {
                 if (jwtUtil.validateToken(jwt, username)) {
-                    String finalRole = role.toUpperCase().startsWith("ROLE_") ? 
-                                       role.toUpperCase() : "ROLE_" + role.toUpperCase();
+    // Role normalize karo
+    String cleanRole = role.toUpperCase().replace("ROLE_", "");
+    String roleWithPrefix = "ROLE_" + cleanRole;
 
-                    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
-                            username, null, List.of(new SimpleGrantedAuthority(finalRole)));
+    List<SimpleGrantedAuthority> authorities = List.of(
+        new SimpleGrantedAuthority(roleWithPrefix),
+        new SimpleGrantedAuthority(cleanRole)
+    );
 
-                    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+    UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
+            username, null, authorities);
 
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                    System.out.println("Authorized User: " + username + " | Final Role: " + finalRole);
-                }
+    authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+    SecurityContextHolder.getContext().setAuthentication(authToken);
+    System.out.println("Authorized User: " + username + " | Granted Authorities: " + authorities);
+}
             } catch (Exception e) {
                 System.out.println("Token Validation Failed: " + e.getMessage());
             }
