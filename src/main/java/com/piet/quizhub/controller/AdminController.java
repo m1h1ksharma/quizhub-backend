@@ -164,6 +164,12 @@ public class AdminController {
         questionService.refreshQuestions();
         return ResponseEntity.ok(Map.of("message", "Bank Cleared!"));
     }
+    @GetMapping("/questions/{id}")
+public ResponseEntity<Question> getQuestionById(@PathVariable Long id) {
+    return questionRepo.findById(id)
+            .map(ResponseEntity::ok)
+            .orElse(ResponseEntity.notFound().build());
+}
 
     // --- EXCEL & AI ---
     @PostMapping("/questions/upload-excel")
