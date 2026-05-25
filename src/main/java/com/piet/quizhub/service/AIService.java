@@ -16,8 +16,8 @@ public class AIService {
     public String getAIQuestions(String topic, int count, String difficulty) {
         RestTemplate restTemplate = new RestTemplate();
 
-        // Gemini API URL[cite: 1]
-        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + apiKey;
+        // ✅ FIXED: Using the active 'gemini-2.5-flash' model to bypass Google's 404 legacy deactivation
+        String geminiUrl = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
 
         String prompt = String.format(
             "Generate exactly %d MCQ questions on the topic '%s' with '%s' difficulty. " +
@@ -45,7 +45,7 @@ public class AIService {
                 List parts = (List) content.get("parts");
                 String rawText = (String) ((Map) parts.get(0)).get("text");
 
-                // Markdown clean karke sirf JSON return karega[cite: 1]
+                // Markdown formatting blocks ko clean karke raw JSON array nikalega
                 return rawText.replace("```json", "").replace("```", "").trim();
             }
             return "Error: Received status " + response.getStatusCode();

@@ -28,6 +28,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // 5. Admin Stats: Total Students ka count (Admins ko exclude karke)
     long countByRole(String role);
 
+    // 6. UG Students Reset: Exact match for Email + Name
+    Optional<User> findByEmailAndName(String email, String name);
+
     /**
      * ⚠️ NOTE: 
      * findTopScore(), findAllByOrderByScoreDesc(), aur 

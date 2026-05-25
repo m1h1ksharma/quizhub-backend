@@ -26,7 +26,8 @@ public class Result {
     private boolean attempted = false; 
     private String quizRound;  
     private int quizLimit;
-  
+    private String schoolName;
+    private String area;
 
     @CreationTimestamp
     @Column(updatable = false)
